@@ -80,6 +80,7 @@ def parse_metadata(
     geometry_mode = find_first(
         name,
         [
+            "relative_v4",
             "relative_v3",
             "relative_v2",
             "relative_v1",

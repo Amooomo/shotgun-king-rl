@@ -317,11 +317,23 @@ class ShotgunKingLite:
 
         events.append("reload")
 
-    def _pawn_attacks_player(self, row: int, col: int,) -> bool:
+    def _pawn_attacks_player(
+        self,
+        row: int,
+        col: int,
+        player_pos: tuple[int, int] | None = None,
+    ) -> bool:
+        """Return True if the white pawn at (row, col) attacks the player.
 
-        player_row, player_col = (
-            self.state.player_pos
-        )
+        ``player_pos`` allows hypothetical queries. When it is ``None`` the
+        current ``self.state.player_pos`` is used, which preserves the old
+        behaviour.
+        """
+
+        if player_pos is None:
+            player_pos = self.state.player_pos
+
+        player_row, player_col = player_pos
 
         targets = [
             (row + 1, col - 1),
@@ -333,11 +345,32 @@ class ShotgunKingLite:
             player_col,
         ) in targets
 
-    def _rook_attacks_player(self,row: int,col: int,) -> bool:
+    def _rook_attacks_player(
+        self,
+        row: int,
+        col: int,
+        board: np.ndarray | None = None,
+        player_pos: tuple[int, int] | None = None,
+    ) -> bool:
+        """Return True if the white rook at (row, col) attacks the player.
 
-        s = self.state
+        ``board`` and ``player_pos`` allow hypothetical queries:
 
-        pr, pc = s.player_pos
+        * ``board is None``      -> use ``self.state.board``
+        * ``player_pos is None`` -> use ``self.state.player_pos``
+
+        Passing both is required for a correct hypothetical move query,
+        because the Black King must be removed from its old cell before the
+        rook's line-of-sight is evaluated.
+        """
+
+        if board is None:
+            board = self.state.board
+
+        if player_pos is None:
+            player_pos = self.state.player_pos
+
+        pr, pc = player_pos
 
         # 不同行也不同列
         if row != pr and col != pc:
@@ -353,7 +386,7 @@ class ShotgunKingLite:
                 step,
             ):
 
-                if s.board[row, c] != Piece.EMPTY:
+                if board[row, c] != Piece.EMPTY:
                     return False
 
             return True
@@ -366,7 +399,7 @@ class ShotgunKingLite:
             step,
         ):
 
-            if s.board[r, col] != Piece.EMPTY:
+            if board[r, col] != Piece.EMPTY:
                 return False
 
         return True
@@ -843,9 +876,23 @@ class ShotgunKingLite:
 
     def get_player_attackers(
         self,
+        board: np.ndarray | None = None,
+        player_pos: tuple[int, int] | None = None,
     ) -> list[tuple[int, int]]:
+        """Return all white pieces currently attacking the player.
 
-        s = self.state
+        This is the single source of truth for the white attack rules.
+        ``board`` and ``player_pos`` may be supplied to query a hypothetical
+        situation (for example, the board after a candidate Black King move).
+        When they are ``None`` the current ``self.state`` is used, matching the
+        original behaviour.
+        """
+
+        if board is None:
+            board = self.state.board
+
+        if player_pos is None:
+            player_pos = self.state.player_pos
 
         attackers = []
 
@@ -854,7 +901,7 @@ class ShotgunKingLite:
             for col in range(BOARD_SIZE):
 
                 piece = Piece(
-                    s.board[row, col]
+                    board[row, col]
                 )
 
                 if piece == Piece.WHITE_PAWN:
@@ -862,6 +909,7 @@ class ShotgunKingLite:
                     if self._pawn_attacks_player(
                         row,
                         col,
+                        player_pos=player_pos,
                     ):
                         attackers.append(
                             (row, col)
@@ -872,6 +920,8 @@ class ShotgunKingLite:
                     if self._rook_attacks_player(
                         row,
                         col,
+                        board=board,
+                        player_pos=player_pos,
                     ):
                         attackers.append(
                             (row, col)
@@ -879,7 +929,7 @@ class ShotgunKingLite:
 
                 elif piece == Piece.WHITE_KING:
 
-                    pr, pc = (s.player_pos)
+                    pr, pc = player_pos
 
                     dr = abs(pr - row)
 

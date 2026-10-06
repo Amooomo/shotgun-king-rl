@@ -12,6 +12,7 @@ from stable_baselines3.common.env_checker import (
 
 from shotgun_king.core import (
     Direction,
+    GameState,
     MOVE_BASE,
     N_ACTIONS,
     RELOAD,
@@ -804,3 +805,423 @@ def test_relative_v3_no_threat():
         assert np.all(
             threat == 0.0
         )
+
+
+# ==================================================
+# relative_v4 : v2 + immediate move danger
+# ==================================================
+
+
+def _set_env_state(
+    env,
+    board,
+    player_pos,
+    ammo: int = 2,
+):
+
+    state = GameState(
+        board=np.asarray(
+            board,
+            dtype=np.int8,
+        ),
+        player_pos=player_pos,
+        ammo=ammo,
+        max_ammo=ammo,
+    )
+
+    # Keep the Gym layer snapshot and the Core state in sync so that the
+    # geometry helpers and game.legal_actions() describe the same board.
+    env.game.state = state
+    env._state = state
+
+    return state
+
+
+def test_relative_v4_geometry_shape():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="random_medium",
+        geometry_mode="relative_v4",
+    )
+
+    assert (
+        env.observation_space
+        .spaces["geometry"]
+        .shape
+        == (55,)
+    )
+
+    obs, _ = env.reset(
+        seed=42
+    )
+
+    assert (
+        obs["geometry"].shape
+        == (55,)
+    )
+
+    assert (
+        obs["geometry"].dtype
+        == np.float32
+    )
+
+    assert np.all(
+        np.isfinite(
+            obs["geometry"]
+        )
+    )
+
+    assert np.all(
+        obs["geometry"] >= -1.0
+    )
+
+    assert np.all(
+        obs["geometry"] <= 1.0
+    )
+
+    assert env.observation_space.contains(
+        obs
+    )
+
+
+def test_relative_v4_v2_prefix_is_unchanged():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="random_medium",
+        geometry_mode="relative_v4",
+    )
+
+    obs, _ = env.reset(
+        seed=42
+    )
+
+    v2 = env._get_geometry_obs_v2()
+
+    assert np.allclose(
+        obs["geometry"][:47],
+        v2,
+    )
+
+
+def test_relative_v4_move_danger_shape_and_range():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="random_medium",
+        geometry_mode="relative_v4",
+    )
+
+    env.reset(seed=42)
+
+    danger = (
+        env._get_move_danger_features()
+    )
+
+    assert danger.shape == (8,)
+
+    assert danger.dtype == np.float32
+
+    assert np.all(
+        (danger == 0.0)
+        | (danger == 1.0)
+    )
+
+
+def test_relative_v4_safe_move_has_zero_danger():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="fixed",
+        geometry_mode="relative_v4",
+    )
+
+    env.reset(seed=42)
+
+    board = np.zeros(
+        (8, 8),
+        dtype=np.int8,
+    )
+
+    player_pos = (4, 4)
+
+    board[player_pos] = Piece.BLACK_KING
+
+    # White King far away, does not attack (4, 4) or (3, 4).
+    board[0, 7] = Piece.WHITE_KING
+
+    _set_env_state(
+        env,
+        board,
+        player_pos,
+    )
+
+    danger = (
+        env._get_move_danger_features()
+    )
+
+    # MOVE_UP -> (3, 4) is legal and safe.
+    assert (
+        MOVE_BASE + int(Direction.UP)
+        in env.game.legal_actions()
+    )
+
+    assert (
+        danger[int(Direction.UP)]
+        == 0.0
+    )
+
+
+def test_relative_v4_rook_move_is_marked_dangerous():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="fixed",
+        geometry_mode="relative_v4",
+    )
+
+    env.reset(seed=42)
+
+    board = np.zeros(
+        (8, 8),
+        dtype=np.int8,
+    )
+
+    player_pos = (1, 1)
+
+    board[player_pos] = Piece.BLACK_KING
+
+    # Rook to the up-left of the player.
+    board[0, 0] = Piece.WHITE_ROOK
+
+    board[7, 7] = Piece.WHITE_KING
+
+    _set_env_state(
+        env,
+        board,
+        player_pos,
+    )
+
+    danger = (
+        env._get_move_danger_features()
+    )
+
+    # MOVE_LEFT -> (1, 0) is legal but sits on the rook's file (0, 0).
+    assert (
+        MOVE_BASE + int(Direction.LEFT)
+        in env.game.legal_actions()
+    )
+
+    assert (
+        danger[int(Direction.LEFT)]
+        == 1.0
+    )
+
+
+def test_relative_v4_pawn_move_is_marked_dangerous():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="fixed",
+        geometry_mode="relative_v4",
+    )
+
+    env.reset(seed=42)
+
+    board = np.zeros(
+        (8, 8),
+        dtype=np.int8,
+    )
+
+    player_pos = (3, 4)
+
+    board[player_pos] = Piece.BLACK_KING
+
+    # White pawn attacks (4, 2) and (4, 4).
+    board[3, 3] = Piece.WHITE_PAWN
+
+    board[0, 7] = Piece.WHITE_KING
+
+    _set_env_state(
+        env,
+        board,
+        player_pos,
+    )
+
+    danger = (
+        env._get_move_danger_features()
+    )
+
+    # MOVE_DOWN -> (4, 4) is legal but attacked by the pawn.
+    assert (
+        MOVE_BASE + int(Direction.DOWN)
+        in env.game.legal_actions()
+    )
+
+    assert (
+        danger[int(Direction.DOWN)]
+        == 1.0
+    )
+
+
+def test_relative_v4_illegal_move_has_zero_danger():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="fixed",
+        geometry_mode="relative_v4",
+    )
+
+    # Fixed layout puts the Black King on the bottom row.
+    env.reset(seed=42)
+
+    danger = (
+        env._get_move_danger_features()
+    )
+
+    # Moving down / down-left / down-right is off the board.
+    for direction in (
+        Direction.DOWN,
+        Direction.DOWN_LEFT,
+        Direction.DOWN_RIGHT,
+    ):
+
+        action = (
+            MOVE_BASE
+            + int(direction)
+        )
+
+        assert (
+            action
+            not in env.game.legal_actions()
+        )
+
+        assert (
+            danger[int(direction)]
+            == 0.0
+        )
+
+
+def test_relative_v4_hypothetical_removes_old_position_blocker():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="fixed",
+        geometry_mode="relative_v4",
+    )
+
+    env.reset(seed=42)
+
+    board = np.zeros(
+        (8, 8),
+        dtype=np.int8,
+    )
+
+    player_pos = (0, 2)
+
+    board[player_pos] = Piece.BLACK_KING
+
+    # Rook on the same rank as both the old and the new player square.
+    board[0, 0] = Piece.WHITE_ROOK
+
+    board[7, 7] = Piece.WHITE_KING
+
+    _set_env_state(
+        env,
+        board,
+        player_pos,
+    )
+
+    # If the old Black King were left on the board, it would block the
+    # rook's line of sight to (0, 3).
+    stale_board = board.copy()
+
+    assert (
+        env.game.get_player_attackers(
+            board=stale_board,
+            player_pos=(0, 3),
+        )
+        == []
+    )
+
+    danger = (
+        env._get_move_danger_features()
+    )
+
+    # Correct hypothetical board removes the old Black King, so the rook
+    # attacks the destination.
+    assert (
+        MOVE_BASE + int(Direction.RIGHT)
+        in env.game.legal_actions()
+    )
+
+    assert (
+        danger[int(Direction.RIGHT)]
+        == 1.0
+    )
+
+
+def test_relative_v4_survives_win_terminal_state():
+
+    env = ShotgunKingEnv(
+        action_mode="pruned_shots",
+        layout_mode="fixed",
+        geometry_mode="relative_v4",
+    )
+
+    env.reset(seed=42)
+
+    state = env.game.state
+
+    br, bc = state.player_pos
+
+    for piece in (
+        Piece.WHITE_KING,
+        Piece.WHITE_ROOK,
+        Piece.WHITE_PAWN,
+    ):
+
+        state.board[
+            state.board == piece
+        ] = Piece.EMPTY
+
+    state.board[
+        br - 2,
+        bc,
+    ] = Piece.WHITE_KING
+
+    action = (
+        SHOOT_BASE
+        + int(Direction.UP)
+    )
+
+    (
+        obs,
+        reward,
+        terminated,
+        truncated,
+        info,
+    ) = env.step(action)
+
+    assert terminated
+    assert not truncated
+
+    assert (
+        obs["geometry"].shape
+        == (55,)
+    )
+
+    assert np.all(
+        np.isfinite(
+            obs["geometry"]
+        )
+    )
+
+    assert np.all(
+        obs["geometry"] >= -1.0
+    )
+
+    assert np.all(
+        obs["geometry"] <= 1.0
+    )

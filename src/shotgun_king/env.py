@@ -9,6 +9,7 @@ from .core import (
     DIRECTION_VECTOR,
     Direction,
     GameState,
+    MOVE_BASE,
     N_ACTIONS,
     Piece,
     SHOOT_BASE,
@@ -31,6 +32,7 @@ GEOMETRY_DIMS = {
     "relative_v1": 25,
     "relative_v2": 47,
     "relative_v3": 56,
+    "relative_v4": 55,
 }
 
 N_BOARD_CHANNELS = len(OBS_PIECES)
@@ -75,6 +77,7 @@ class ShotgunKingEnv(gym.Env):
             "relative_v1",
             "relative_v2",
             "relative_v3",
+            "relative_v4",
         ):
             raise ValueError(
                 f"Unknown geometry_mode: "
@@ -223,6 +226,7 @@ class ShotgunKingEnv(gym.Env):
             "relative_v1",
             "relative_v2",
             "relative_v3",
+            "relative_v4",
         ):
 
             obs["geometry"] = (
@@ -1015,6 +1019,138 @@ class ShotgunKingEnv(gym.Env):
 
         return geometry
 
+    def _get_geometry_obs_v4(
+        self,
+    ) -> np.ndarray:
+
+        v2 = (
+            self._get_geometry_obs_v2()
+        )
+
+        move_danger = (
+            self._get_move_danger_features()
+        )
+
+        geometry = np.concatenate(
+            [
+                v2,
+                move_danger,
+            ]
+        ).astype(
+            np.float32
+        )
+
+        assert geometry.shape == (
+            55,
+        )
+
+        assert np.all(
+            np.isfinite(
+                geometry
+            )
+        )
+
+        return geometry
+
+    def _get_move_danger_features(
+        self,
+    ) -> np.ndarray:
+        """Action-conditioned immediate move danger (8 dims).
+
+        For each MOVE direction, in the same order as ``Direction``:
+
+        * ``0.0`` -> the move is illegal, or the resulting square is not
+          attacked by any white piece right now.
+        * ``1.0`` -> the move is legal and the resulting square is already
+          attacked by a white piece right now.
+
+        Only *immediate* danger is predicted: the white pieces are not allowed
+        to move first. Legality itself is not re-encoded here (the action mask
+        already covers "can I do it?"); an illegal MOVE is reported as ``0.0``.
+
+        The hypothetical board must both remove the Black King from its old
+        square and place it on the new square. Moving only the queried player
+        position would leave the old Black King as a phantom blocker on the
+        Rook line of sight and could report a false "safe" cell.
+        """
+
+        if self._state is None:
+
+            raise RuntimeError(
+                "Environment has not been reset."
+            )
+
+        board = self._state.board
+
+        row, col = (
+            self._state.player_pos
+        )
+
+        legal_actions = set(
+            self.game.legal_actions()
+        )
+
+        features = []
+
+        for direction in Direction:
+
+            action = (
+                MOVE_BASE
+                + int(direction)
+            )
+
+            if action not in legal_actions:
+
+                features.append(0.0)
+
+                continue
+
+            dr, dc = (
+                DIRECTION_VECTOR[
+                    direction
+                ]
+            )
+
+            nr = row + dr
+            nc = col + dc
+
+            hypothetical_board = (
+                board.copy()
+            )
+
+            hypothetical_board[
+                row, col
+            ] = Piece.EMPTY
+
+            hypothetical_board[
+                nr, nc
+            ] = Piece.BLACK_KING
+
+            attackers = (
+                self.game
+                .get_player_attackers(
+                    board=hypothetical_board,
+                    player_pos=(nr, nc),
+                )
+            )
+
+            features.append(
+                float(bool(attackers))
+            )
+
+        result = np.asarray(
+            features,
+            dtype=np.float32,
+        )
+
+        assert result.shape == (8,)
+
+        assert np.all(
+            np.isfinite(result)
+        )
+
+        return result
+
     def _get_geometry_obs(
         self,
     ) -> np.ndarray:
@@ -1044,6 +1180,15 @@ class ShotgunKingEnv(gym.Env):
 
             return (
                 self._get_geometry_obs_v3()
+            )
+
+        if (
+            self.geometry_mode
+            == "relative_v4"
+        ):
+
+            return (
+                self._get_geometry_obs_v4()
             )
 
         raise RuntimeError(

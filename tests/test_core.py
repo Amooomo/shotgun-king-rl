@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 
 from shotgun_king.core import (
+    BOARD_SIZE,
     ShotgunKingLite,
     Piece,
     Direction,
@@ -352,4 +353,109 @@ def test_random_medium_no_overlap():
         )
 
         assert occupied == expected
+
+
+def test_get_player_attackers_default_matches_explicit_query():
+
+    game = ShotgunKingLite(
+        layout_mode="fixed"
+    )
+
+    game.reset(seed=42)
+
+    assert (
+        game.get_player_attackers()
+        ==
+        game.get_player_attackers(
+            board=game.state.board,
+            player_pos=game.state.player_pos,
+        )
+    )
+
+
+def test_get_player_attackers_hypothetical_rook():
+
+    game = ShotgunKingLite()
+
+    board = np.zeros(
+        (BOARD_SIZE, BOARD_SIZE),
+        dtype=np.int8,
+    )
+
+    board[0, 0] = Piece.WHITE_ROOK
+
+    # Same file, nothing in between -> attacked.
+    assert (
+        game.get_player_attackers(
+            board=board,
+            player_pos=(0, 1),
+        )
+        == [(0, 0)]
+    )
+
+    # Diagonal -> not attacked.
+    assert (
+        game.get_player_attackers(
+            board=board,
+            player_pos=(1, 1),
+        )
+        == []
+    )
+
+
+def test_get_player_attackers_hypothetical_pawn():
+
+    game = ShotgunKingLite()
+
+    board = np.zeros(
+        (BOARD_SIZE, BOARD_SIZE),
+        dtype=np.int8,
+    )
+
+    board[3, 3] = Piece.WHITE_PAWN
+
+    # White pawn attacks (4, 2) and (4, 4).
+    assert (
+        game.get_player_attackers(
+            board=board,
+            player_pos=(4, 4),
+        )
+        == [(3, 3)]
+    )
+
+    assert (
+        game.get_player_attackers(
+            board=board,
+            player_pos=(3, 4),
+        )
+        == []
+    )
+
+
+def test_get_player_attackers_hypothetical_king():
+
+    game = ShotgunKingLite()
+
+    board = np.zeros(
+        (BOARD_SIZE, BOARD_SIZE),
+        dtype=np.int8,
+    )
+
+    board[2, 2] = Piece.WHITE_KING
+
+    assert (
+        game.get_player_attackers(
+            board=board,
+            player_pos=(2, 3),
+        )
+        == [(2, 2)]
+    )
+
+    assert (
+        game.get_player_attackers(
+            board=board,
+            player_pos=(4, 4),
+        )
+        == []
+    )
 
