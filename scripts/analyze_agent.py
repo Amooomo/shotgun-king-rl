@@ -1,5 +1,7 @@
 import argparse
+import json
 from collections import Counter, defaultdict
+from pathlib import Path
 
 import numpy as np
 
@@ -22,6 +24,10 @@ from shotgun_king.core import (
 
 from shotgun_king.env import (
     ShotgunKingEnv,
+)
+
+from shotgun_king.mechanism import (
+    MoveDangerDiagnostics,
 )
 
 from shotgun_king.reward import (
@@ -167,6 +173,12 @@ def main():
     )
 
     parser.add_argument(
+        "--output-json",
+        type=str,
+        default=None,
+    )
+
+    parser.add_argument(
         "--action-mode",
         choices=[
             "full",
@@ -252,6 +264,12 @@ def main():
     )
 
     # ==================================
+    # Immediate move danger mechanism
+    # ==================================
+
+    diagnostics = MoveDangerDiagnostics()
+
+    # ==================================
     # Global statistics
     # ==================================
 
@@ -310,6 +328,21 @@ def main():
             or truncated
         ):
 
+            # Mechanism diagnostic must observe the exact decision state the
+            # agent sees, i.e. BEFORE env.step(action).
+            action_mask = env.action_masks()
+
+            danger = (
+                env._get_move_danger_features()
+            )
+
+            danger_state = (
+                diagnostics.observe(
+                    action_mask,
+                    danger,
+                )
+            )
+
             action = choose_action(
                 agent_type=args.agent,
                 model=model,
@@ -318,6 +351,11 @@ def main():
                 env=env,
                 rng=rng,
                 stochastic=args.stochastic,
+            )
+
+            diagnostics.select(
+                danger_state,
+                action,
             )
 
             group = action_group(
@@ -726,6 +764,118 @@ def main():
                 f"mean_{group.lower():6s}"
                 f" = {avg:.2f}"
             )
+
+    # ----------------------------------
+    # Immediate move danger mechanism
+    # ----------------------------------
+
+    mechanism_counts = (
+        diagnostics.counts()
+    )
+
+    mechanism_rates = (
+        diagnostics.rates()
+    )
+
+    print()
+    print(
+        "----- Immediate Move Danger Mechanism -----"
+    )
+
+    for name, value in (
+        mechanism_counts.items()
+    ):
+
+        print(
+            f"{name:38s}"
+            f"{value:10d}"
+        )
+
+    for name, value in (
+        mechanism_rates.items()
+    ):
+
+        print(
+            f"{name:38s}"
+            f"{value:10.4f}"
+        )
+
+    # ----------------------------------
+    # Machine-readable output
+    # ----------------------------------
+
+    if args.output_json is not None:
+
+        report = {
+            "agent": args.agent,
+            "model": args.model,
+            "reward": args.reward,
+            "action_mode": args.action_mode,
+            "layout_mode": args.layout_mode,
+            "geometry_mode": args.geometry_mode,
+            "episodes": args.episodes,
+            "eval_seed": args.seed,
+            "stochastic": bool(
+                args.stochastic
+            ),
+
+            "outcomes": {
+                "win": int(
+                    outcomes["WIN"]
+                ),
+                "death": int(
+                    outcomes["DEATH"]
+                ),
+                "timeout": int(
+                    outcomes["TIMEOUT"]
+                ),
+            },
+
+            "episode": {
+                "mean_return": float(
+                    np.mean(
+                        episode_returns
+                    )
+                ),
+                "mean_length": float(
+                    np.mean(
+                        episode_lengths
+                    )
+                ),
+            },
+
+            "mechanism": {
+                **mechanism_counts,
+                **mechanism_rates,
+            },
+        }
+
+        output_path = Path(
+            args.output_json
+        )
+
+        output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with output_path.open(
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                report,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+        print()
+        print(
+            "JSON report written:",
+            output_path,
+        )
 
     env.close()
 

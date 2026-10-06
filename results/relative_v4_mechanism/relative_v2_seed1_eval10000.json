@@ -1,0 +1,35 @@
+{
+  "agent": "ppo",
+  "model": "models/shaped_v2_pruned_shots_random_medium_flat_relative_v2_seed1/best_win_model.zip",
+  "reward": "shaped_v2",
+  "action_mode": "pruned_shots",
+  "layout_mode": "random_medium",
+  "geometry_mode": "relative_v2",
+  "episodes": 1000,
+  "eval_seed": 10000,
+  "stochastic": false,
+  "outcomes": {
+    "win": 590,
+    "death": 409,
+    "timeout": 1
+  },
+  "episode": {
+    "mean_return": 7.366509999999999,
+    "mean_length": 5.645
+  },
+  "mechanism": {
+    "decision_states_total": 5645,
+    "states_with_legal_move": 5645,
+    "states_with_dangerous_legal_move": 1899,
+    "legal_moves_total": 35074,
+    "dangerous_legal_moves_total": 3748,
+    "selected_move_actions": 3737,
+    "selected_dangerous_moves": 165,
+    "selected_moves_in_danger_states": 1082,
+    "dangerous_state_exposure_rate": 0.3364038972542073,
+    "dangerous_move_share": 0.10685978217483036,
+    "dangerous_selection_rate": 0.08688783570300158,
+    "dangerous_rate_given_move_in_danger_state": 0.15249537892791126,
+    "overall_dangerous_action_rate": 0.029229406554472984
+  }
+}
