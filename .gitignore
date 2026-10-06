@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# TensorBoard / runtime logs
+logs/
+runs/
+
+# Trained models
+models/
+
+# Temporary
+*.tmp
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

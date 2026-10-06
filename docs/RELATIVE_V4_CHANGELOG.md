@@ -192,5 +192,78 @@ python scripts/evaluate_ppo.py \
 
 ## 10. 尚未解决的问题 / 待办
 
-- 正式 `relative_v4` 300k 训练、1000 episodes independent evaluation、behavior analysis 结果见 `docs/实验总结.md`（训练完成后补充）。
-- 若 v4 相对 v2 无提升，下一步才考虑 `relative_v5 = enemy-response risk`；本任务不实现 v5。
+- 本任务范围内没有阻塞问题。
+- 正式 `relative_v4` 300k 训练、1000 episodes independent evaluation、behavior analysis 已完成，结果见第 11 节与 `docs/实验总结.md`。
+- 若后续仍要提升，才考虑 `relative_v5 = enemy-response risk`；本任务不实现 v5。
+
+---
+
+## 11. 正式 300k 实验结果（seed 42）
+
+命令：
+
+```text
+python scripts/train_ppo.py \
+    --reward shaped_v2 \
+    --action-mode pruned_shots \
+    --layout-mode random_medium \
+    --feature-mode flat \
+    --geometry-mode relative_v4 \
+    --timesteps 300000 \
+    --seed 42 \
+    --run-tag relv4_300k
+```
+
+Callback win rate（`WinRateEvalCallback`，100 eval episodes，eval_seed=20000）：
+
+```text
+25k   36.0%   (Death 55.0%, Timeout 9.0%)
+50k   49.0%   (Death 47.0%, Timeout 4.0%)
+75k   52.0%   (Death 44.0%, Timeout 4.0%)
+100k  64.0%   (Death 36.0%, Timeout 0.0%)
+150k  73.0%   (Death 27.0%, Timeout 0.0%)
+200k  72.0%   (Death 27.0%, Timeout 1.0%)
+250k  76.0%   (Death 24.0%, Timeout 0.0%)
+300k  76.0%   (Death 24.0%, Timeout 0.0%)
+```
+
+Independent evaluation（1000 episodes，eval seed 10000）：
+
+```text
+Win:         74.50%
+Death:       25.30%
+Timeout:      0.20%
+Mean return:  12.266
+Mean length:  6.60
+```
+
+Behavior analysis（1000 episodes，deterministic，seed 10000）：
+
+```text
+Outcomes: WIN 745 (74.50%) / DEATH 253 (25.30%) / TIMEOUT 2 (0.20%)
+
+Action distribution:
+  MOVE    5002 (75.80%)
+  SHOOT   1573 (23.84%)
+  RELOAD    24 ( 0.36%)
+
+Shooting:
+  hit rate 100.00%  (pruned_shots)
+  pawn kills 458 / rook kills 370 / king kills 745
+
+Behavior by outcome:
+  [WIN]   n=745  mean_length=7.07  mean_return= 20.489  move=5.14 shoot=1.91
+  [DEATH] n=253  mean_length=4.64  mean_return=-11.790  move=4.03 shoot=0.59
+  [TIMEOUT] n=2  mean_length=80.00 mean_return= -7.550 move=78.00 shoot=2.00
+```
+
+对比 relative_v2（多 seed Win ≈ 58% / Death ≈ 41%）：
+
+```text
+relative_v4 seed42：Win 74.5% / Death 25.3%
+```
+
+结果落在任务第 20 节给出的「Win ≥ 63~65% / Death ≤ 35~37%」提升区间内，说明
+**Immediate movement safety 是当前主要瓶颈之一**，action-conditioned move danger 有效。
+下一步若要继续，应研究 enemy reply risk（v5，本任务未实现）。
+
