@@ -1,0 +1,14 @@
+{
+    "unifyChatProvider.completion.providers": [
+        {
+            "id": "Opencode Go",
+            "algorithm": "simple",
+            "options": {
+                "model": {
+                    "vendor": "opencodego-agent",
+                    "id": "opencodego-agent:qwen3.8-flash::session-2026-05-21-b::agent-host"
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: shotgun-king-rl
+Version: 0.1.0
+Summary: A reinforcement learning project for Shotgun King
+Requires-Python: >=3.11
+Requires-Dist: numpy
+Requires-Dist: gymnasium
+Requires-Dist: stable-baselines3
+Requires-Dist: sb3-contrib
+Requires-Dist: tensorboard
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
